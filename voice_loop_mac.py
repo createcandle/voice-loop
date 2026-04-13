@@ -53,17 +53,13 @@ def _silence(dur):
     return np.zeros(int(dur * CHIME_SR), dtype=np.float32)
 
 def make_chime(duration=30.0, tick_every=1.5):
-    """Two-tone chime that dissolves into periodic ticks. Single buffer → one sd.play().
-
-    No long silent gap between chime and first tick, so the mic's AGC doesn't
-    ramp up and spike the first tick.
-    """
+    """Two-tone chime + periodic short ticks. Single buffer → one sd.play()."""
     head = np.concatenate([_fade_tone(880, 0.09), _silence(0.03), _fade_tone(1320, 0.10)])
-    tick = _fade_tone(660, 0.08, amp=0.35)
+    # Short soft click-style tick (shorter and quieter than a beep)
+    tick = _fade_tone(550, 0.04, amp=0.18)
     total = int(duration * CHIME_SR)
     buf = np.zeros(total, dtype=np.float32)
     buf[:len(head)] = head
-    # First tick at end of chime; step thereafter
     step = int(tick_every * CHIME_SR)
     for pos in range(len(head), total, step):
         end = min(pos + len(tick), total)

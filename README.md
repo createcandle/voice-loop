@@ -37,8 +37,8 @@ First run downloads Gemma 4 E4B (~3GB), Moonshine (~250MB), Kokoro (~300MB).
 # Recommended defaults (TTS + smart turn + voice interrupt all on)
 uv run voice_loop_mac.py
 
-# + chime and soft ticks while generating
-uv run voice_loop_mac.py --chime-loop
+# + chime on utterance + soft ticks while generating
+uv run voice_loop_mac.py --chime
 
 # + persistent memory (reads/writes MEMORY.md)
 uv run voice_loop_mac.py --memory

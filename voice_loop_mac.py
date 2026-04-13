@@ -52,14 +52,9 @@ def _fade_tone(freq, dur, amp=0.6):
 def _silence(dur):
     return np.zeros(int(dur * CHIME_SR), dtype=np.float32)
 
-def make_chime():
-    # Single short chime ack only (played on its own by --chime flag)
-    return np.concatenate([_fade_tone(880, 0.09), _silence(0.03), _fade_tone(1320, 0.10)])
-
-def make_chime_with_ticks(duration=30.0, tick_every=1.5, tick_start=1.2):
-    """Chime + silence + periodic soft ticks, all in one buffer — one sd.play() call."""
-    parts = [_fade_tone(880, 0.09), _silence(0.03), _fade_tone(1320, 0.10)]
-    head = np.concatenate(parts)
+def make_chime(duration=30.0, tick_every=1.5, tick_start=1.2):
+    """Two-tone chime + periodic ticks while generating. Single buffer → one sd.play()."""
+    head = np.concatenate([_fade_tone(880, 0.09), _silence(0.03), _fade_tone(1320, 0.10)])
     tick = _fade_tone(660, 0.08, amp=0.35)
     total = int(duration * CHIME_SR)
     buf = np.zeros(total, dtype=np.float32)
@@ -118,8 +113,8 @@ def main():
     ap.add_argument("--tts", action=B, default=True, help="Kokoro TTS output")
     ap.add_argument("--smart-turn", action=B, default=True, help="Smart Turn v3 endpoint detection")
     ap.add_argument("--aec", action=B, default=True, help="WebRTC AEC3 voice interrupt")
-    ap.add_argument("--chime", action="store_true", help="Play chime when utterance detected")
-    ap.add_argument("--chime-loop", action="store_true", help="Chime + soft ticks while generating")
+    ap.add_argument("--chime", action="store_true",
+                    help="Play chime on utterance + soft ticks while generating")
     ap.add_argument("--memory", action="store_true",
                     help="Read/write MEMORY.md (auto-update durable facts, consolidate every 5 turns)")
     ap.add_argument("--audio-mode", action="store_true", help="Send audio directly to Gemma (experimental)")
@@ -193,8 +188,7 @@ def main():
     executor = ThreadPoolExecutor(max_workers=1)
     # --chime-loop: single buffer (chime + ticks), one sd.play call
     # --chime only: just the chime
-    chime_loop_sound = make_chime_with_ticks() if args.chime_loop else None
-    chime_sound = make_chime() if (args.chime and not args.chime_loop) else None
+    chime_sound = make_chime() if args.chime else None
     audio_q: queue.Queue[np.ndarray] = queue.Queue()
     record_buf: list[np.ndarray] | None = [] if args.record else None
 
@@ -308,7 +302,7 @@ def main():
             nonlocal out_stream, interrupted
             async for chunk_samples, sr in tts_stream:
                 if out_stream is None:
-                    if chime_loop_sound is not None:
+                    if chime_sound is not None:
                         sd.stop()
                     out_stream = sd.OutputStream(samplerate=sr, channels=1, dtype="float32")
                     out_stream.start()
@@ -343,13 +337,9 @@ def main():
 
     def process_utterance(audio, history):
         print(f" ({len(audio) / SAMPLE_RATE:.1f}s)")
-        # Start chime + tick loop in one call (kills device switch click)
-        if chime_loop_sound is not None:
+        if chime_sound is not None:
             print("  *chime*", flush=True)
-            sd.play(chime_loop_sound, CHIME_SR)
-        elif chime_sound is not None:
-            print("  *chime*", flush=True)
-            sd.play(chime_sound, CHIME_SR); sd.wait()
+            sd.play(chime_sound, CHIME_SR)
         wav_path = save_wav(audio) if args.audio_mode else None
         try:
             messages = _sys_messages()
@@ -370,7 +360,7 @@ def main():
             print(f"\n> {response}\n", flush=True)
             if kokoro and response:
                 play_tts_stream(response)
-            elif chime_loop_sound is not None:
+            elif chime_sound is not None:
                 sd.stop()
             history.append({"user": heard, "assistant": response})
             if len(history) > MAX_HISTORY:

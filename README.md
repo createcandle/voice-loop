@@ -123,6 +123,10 @@ Built with:
 - [mlx-vlm](https://github.com/Blaizzy/mlx-vlm) — MLX multimodal inference
 - [Gemma 4](https://huggingface.co/google/gemma-4-E4B-it) — LLM
 
+## Raspberry Pi
+
+See [docs/raspberry-pi.md](docs/raspberry-pi.md) for a full feasibility analysis. Short version: Pi 4 is too slow; Pi 5 + LiteRT-LM is the best current option but still borderline for natural-feeling voice.
+
 ## License
 
 Apache 2.0.

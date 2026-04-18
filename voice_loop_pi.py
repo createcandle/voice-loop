@@ -5,10 +5,10 @@ Moonshine (CPU) transcribes speech. Gemma 4 E2B responds.
 NanoTTS speaks the response. WebRTC AEC3 enables voice interrupt.
 
 Usage:
-    uv run voice_loop_mac.py                        # defaults (TTS + smart turn + AEC)
-    uv run voice_loop_mac.py --no-tts               # text out only
-    uv run voice_loop_mac.py --no-aec               # keypress interrupt only
-    uv run voice_loop_mac.py --chime-loop           # chime + ticks while generating
+    uv run voice_loop_pi.py                        # defaults (TTS + smart turn + AEC)
+    uv run voice_loop_pi.py --no-tts               # text out only
+    uv run voice_loop_pi.py --no-aec               # keypress interrupt only
+    uv run voice_loop_pi.py --chime-loop           # chime + ticks while generating
 """
 
 import argparse
@@ -194,7 +194,7 @@ def main():
     smart_turn = load_smart_turn() if args.smart_turn else None
     kokoro = None
     if args.nanotts:
-        echo "using NanoTTS"
+        print("using NanoTTS")
     elif args.tts:
         print("Loading Kokoro TTS...", flush=True)
         import subprocess
@@ -346,7 +346,7 @@ def main():
             nano_tts_dir = os.path.join(file_path,'tts64')
             nano_tts_path = os.path.join(nano_tts_dir,'nanotts64')
             lang_dir = os.path.join(file_path,'lang')
-            response_wav_path = os.path.join(file_path,response.wav')
+            response_wav_path = os.path.join(file_path,'response.wav')
             environment = os.environ.copy()
             echo_process = subprocess.Popen(('echo', str(text)), stdout=subprocess.PIPE)
             nanotts_start_command_array = [str(nano_tts_path),'-l',str(lang_dir),'-v','en-GB','--volume','100','--speed','0.9','--pitch','1.2','-w','-o',str(response_wav_path)]
@@ -556,7 +556,6 @@ def main():
                         return await loop.run_in_executor(
                             None,
                             lambda t=text: tts(t),
-                            ),
                         )
                 
                 GROUP = 2

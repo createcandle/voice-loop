@@ -156,7 +156,8 @@ def _get_ref_segment(tts_concat, pos, length):
 def main():
     ap = argparse.ArgumentParser(description="Voice Loop — a minimal on-device voice agent (Mac)")
     B = argparse.BooleanOptionalAction
-    ap.add_argument("--tts", action=B, default=True, help="Kokoro TTS output")
+    ap.add_argument("--tts", action=B, help="Kokoro TTS output")
+    ap.add_argument("--nanotts", action=B, default=True, help="NanoTTS output")
     ap.add_argument("--smart-turn", action=B, default=True, help="Smart Turn v3 endpoint detection")
     ap.add_argument("--aec", action=B, default=True, help="WebRTC AEC3 voice interrupt")
     ap.add_argument("--chime", action=B, default=True,
@@ -192,7 +193,9 @@ def main():
     model, processor = load(args.model)
     smart_turn = load_smart_turn() if args.smart_turn else None
     kokoro = None
-    if args.tts:
+    if args.nanotts:
+        echo "using NanoTTS"
+    elif args.tts:
         print("Loading Kokoro TTS...", flush=True)
         import subprocess
         try:
@@ -332,26 +335,30 @@ def main():
             # (e.g. barge-in interruption) so MLX doesn't keep generating.
             cancel.set()
 
-    def speak_tts(voice_message):
-        # generate NanoTTS wave file
-        environment = os.environ.copy()
-        echo_process = subprocess.Popen(('echo', str(voice_message)), stdout=subprocess.PIPE)
-        nanotts_start_command_array = [self.nanotts_path,'-l','./lang','-v','en-GB','--volume','100','--speed','0.9','--pitch','1.2','-w','-o','response.wav']
-        nanotts_process = subprocess.run(nanotts_start_command_array, capture_output=True, stdin=self.echo_process.stdout, env=environment)
-        #if self.DEBUG:
-        #    print("NanoTTS start command: ")
-        #    print("export LD_LIBRARY_PATH=" + '{}:{}'.format(self.tts_path,self.arm_libs_path) + ";echo " + str(voice_message) + " | " + str( ' '.join(nanotts_start_command_array) ) + "\n")
+    def speak_tts(text):
 
-
-        
-
-        #samples, sr = kokoro.create(text, voice=args.voice, speed=1.0, lang=_lang_from_voice(args.voice))
-
-        samples, sr = sf.read('response.wav')
-        #sd.play(data, fs)
-        #sd.wait()
-        
-        sd.play(samples, sr); sd.wait()
+        if kokoro:
+            samples, sr = kokoro.create(text, voice=args.voice, speed=1.0, lang=_lang_from_voice(args.voice))
+            sd.play(samples, sr); sd.wait()
+        else:
+            # generate NanoTTS wave file
+            file_path = os.path.realpath(__file__)
+            nano_tts_dir = os.path.join(file_path,'tts64')
+            nano_tts_path = os.path.join(nano_tts_dir,'nanotts64')
+            lang_dir = os.path.join(file_path,'lang')
+            response_wav_path = os.path.join(file_path,response.wav')
+            environment = os.environ.copy()
+            echo_process = subprocess.Popen(('echo', str(text)), stdout=subprocess.PIPE)
+            nanotts_start_command_array = [str(nano_tts_path),'-l',str(lang_dir),'-v','en-GB','--volume','100','--speed','0.9','--pitch','1.2','-w','-o',str(response_wav_path)]
+            nanotts_process = subprocess.run(nanotts_start_command_array, capture_output=True, stdin=echo_process.stdout, env=environment)
+    
+            print("NanoTTS test command: ")
+            print("export LD_LIBRARY_PATH=" + '{}'.format(str(nano_tts_dir)) + ";echo " + str(text) + " | " + str( ' '.join(nanotts_start_command_array) ) + "\n")
+    
+            #samples, sr = kokoro.create(text, voice=args.voice, speed=1.0, lang=_lang_from_voice(args.voice))
+            if os.file.isfile(response_wav_path):
+                samples, sr = sf.read(response_wav_path)
+                sd.play(samples, sr); sd.wait()
 
     _mem_path = _DIR / "MEMORY.md"
 
@@ -534,15 +541,24 @@ def main():
                 Sentences are grouped in twos before synthesis so Kokoro has
                 enough context for natural prosody across sentence boundaries.
                 """
-                async def _synth(text):
-                    return await loop.run_in_executor(
-                        None,
-                        lambda t=text: kokoro.create(
-                            t, voice=args.voice, speed=1.0,
-                            lang=_lang_from_voice(args.voice),
-                        ),
-                    )
 
+                
+                async def _synth(text):
+                    if kokoro:
+                        return await loop.run_in_executor(
+                            None,
+                            lambda t=text: kokoro.create(
+                                t, voice=args.voice, speed=1.0,
+                                lang=_lang_from_voice(args.voice),
+                            ),
+                        )
+                    else:
+                        return await loop.run_in_executor(
+                            None,
+                            lambda t=text: tts(t),
+                            ),
+                        )
+                
                 GROUP = 2
                 buf: list[str] = []
                 for sentence in sentence_iter:
@@ -640,6 +656,8 @@ def main():
                 print(f"  [{heard}]")
                 print(f"\n> {response}\n", flush=True)
                 if kokoro and response:
+                    play_tts_stream(response)
+                elif response:
                     play_tts_stream(response)
                 elif chime_sound is not None:
                     _wait_for_chime_gap()

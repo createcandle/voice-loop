@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Voice Loop — a minimal on-device voice agent. Mac M4 / Apple Silicon.
+"""Voice Loop — a minimal on-device voice agent. Raspberry Pi.
 
-Moonshine (CPU) transcribes speech. Gemma 4 E4B (Metal) responds.
-Kokoro TTS speaks the response. WebRTC AEC3 enables voice interrupt.
+Moonshine (CPU) transcribes speech. Gemma 4 E2B responds.
+NanoTTS speaks the response. WebRTC AEC3 enables voice interrupt.
 
 Usage:
     uv run voice_loop_mac.py                        # defaults (TTS + smart turn + AEC)
@@ -23,12 +23,14 @@ import termios
 import threading
 import time as _time
 import tty
+import subprocess
 import wave
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
+import soundfile as sf
 # Larger audio buffer via 'high' latency → more robust to MLX CPU saturation.
 # NB: don't set sd.default.blocksize globally — a large blocksize on the TTS
 # output stream introduces a mic-to-reference delay that misaligns AEC.
@@ -162,7 +164,7 @@ def main():
     ap.add_argument("--memory", action="store_true",
                     help="Read/write MEMORY.md (auto-update durable facts, consolidate every 5 turns)")
     ap.add_argument("--audio-mode", action="store_true", help="Send audio directly to Gemma (experimental)")
-    ap.add_argument("--model", default="mlx-community/gemma-4-E4B-it-4bit")
+    ap.add_argument("--model", default="mlx-community/gemma-4-E2B-it-4bit")
     ap.add_argument("--silence-ms", type=int, default=700)
     ap.add_argument("--record", nargs="?", const="", metavar="FILE",
                     help="Record mic to WAV for debugging (default: tmp/recording-TIMESTAMP.wav)")
@@ -330,8 +332,25 @@ def main():
             # (e.g. barge-in interruption) so MLX doesn't keep generating.
             cancel.set()
 
-    def speak_tts(text):
-        samples, sr = kokoro.create(text, voice=args.voice, speed=1.0, lang=_lang_from_voice(args.voice))
+    def speak_tts(voice_message):
+        # generate NanoTTS wave file
+        environment = os.environ.copy()
+        echo_process = subprocess.Popen(('echo', str(voice_message)), stdout=subprocess.PIPE)
+        nanotts_start_command_array = [self.nanotts_path,'-l','./lang','-v','en-GB','--volume','100','--speed','0.9','--pitch','1.2','-w','-o','response.wav']
+        nanotts_process = subprocess.run(nanotts_start_command_array, capture_output=True, stdin=self.echo_process.stdout, env=environment)
+        #if self.DEBUG:
+        #    print("NanoTTS start command: ")
+        #    print("export LD_LIBRARY_PATH=" + '{}:{}'.format(self.tts_path,self.arm_libs_path) + ";echo " + str(voice_message) + " | " + str( ' '.join(nanotts_start_command_array) ) + "\n")
+
+
+        
+
+        #samples, sr = kokoro.create(text, voice=args.voice, speed=1.0, lang=_lang_from_voice(args.voice))
+
+        samples, sr = sf.read('response.wav')
+        #sd.play(data, fs)
+        #sd.wait()
+        
         sd.play(samples, sr); sd.wait()
 
     _mem_path = _DIR / "MEMORY.md"
